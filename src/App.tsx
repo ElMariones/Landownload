@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError, type Health, type Job, type Media, type Site } from './api';
 import { looksLikeMany } from './lib/links';
-import { HOSTED, loadConnection, saveConnection } from './lib/server';
+import { HOSTED, loadConnection, saveConnection, SERVER_URL } from './lib/server';
 import { Masthead } from './components/Masthead';
 import { SingleLink } from './components/SingleLink';
 import { BatchComposer } from './components/BatchComposer';
@@ -9,6 +9,7 @@ import { Preview, PreviewPlaceholder } from './components/Preview';
 import { Tray } from './components/Tray';
 import { SiteIndex } from './components/SiteIndex';
 import { Unlock } from './components/Unlock';
+import { ServerOff } from './components/ServerOff';
 
 type Mode = 'single' | 'batch';
 const ACTIVE = new Set(['queued', 'downloading', 'processing']);
@@ -42,11 +43,19 @@ export default function App() {
       setOffline(false);
       setNeedsServer(false);
       if (!next.auth_required) setSites(await api.sites());
-    } catch {
+    } catch (err) {
       setOffline(true);
-      if (HOSTED) setNeedsServer(true);
+      // A typed-in address that never answered is probably wrong; a built-in one is just switched off.
+      if (HOSTED && !SERVER_URL && !(err instanceof ApiError && err.status === 0)) setNeedsServer(true);
     }
   }, []);
+
+  // While the server is off, keep checking so the page comes back by itself.
+  useEffect(() => {
+    if (!offline) return;
+    const timer = window.setInterval(loadHealth, 8000);
+    return () => window.clearInterval(timer);
+  }, [offline, loadHealth]);
 
   useEffect(() => {
     loadHealth();
@@ -69,6 +78,7 @@ export default function App() {
       }
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) setHealth((h) => (h ? { ...h, auth_required: true } : h));
+      if (err instanceof ApiError && [0, 502, 503, 504].includes(err.status)) setOffline(true);
     }
   }, []);
 
@@ -168,11 +178,14 @@ export default function App() {
   if (needsServer || health?.auth_required) {
     return <Unlock onUnlocked={loadHealth} />;
   }
+  if (offline) {
+    return <ServerOff onRetry={loadHealth} />;
+  }
 
   return (
     <div className="shell">
       <div className="grain" aria-hidden />
-      <Masthead health={health} offline={offline} onChangeServer={HOSTED ? changeServer : undefined} />
+      <Masthead health={health} offline={offline} onChangeServer={HOSTED && !SERVER_URL ? changeServer : undefined} />
 
       <main className="workbench">
         <section className="intake" aria-label="Add media">

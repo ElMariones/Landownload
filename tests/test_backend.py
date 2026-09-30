@@ -125,3 +125,17 @@ def test_multi_media_post_offers_each_item_and_a_zip():
     assert options[0]['size'] == 15 and options[0]['kind'] == 'video'
     assert [o['playlist_items'] for o in options] == ['1:50', '1', '2']
     assert options[2]['label'] == 'Image 2 · 1200×800'
+
+
+def test_each_browser_only_sees_its_own_downloads(client):
+    from backend import app as app_module
+    job = app_module.jobs.enqueue({'owner': 'browser-aaaa', 'title': 't', 'platform': 'p', 'url': 'u',
+                                   'quality': 'q', 'kind': 'video', 'ext': 'mp4'},
+                                  {'engine': 'none', 'url': 'u', 'title': 't', 'option': {}})
+    auth = unlock(client)
+    mine = client.get('/api/downloads', headers={**auth, 'X-Client-Id': 'browser-aaaa'}).json()
+    theirs = client.get('/api/downloads', headers={**auth, 'X-Client-Id': 'browser-bbbb'}).json()
+    assert [j['id'] for j in mine] == [job['id']] and 'owner' not in mine[0]
+    assert theirs == []
+    stranger = client.post(f"/api/downloads/{job['id']}/cancel", json={}, headers={**auth, 'X-Client-Id': 'browser-bbbb'})
+    assert stranger.status_code == 404

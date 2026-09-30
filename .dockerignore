@@ -1,0 +1,13 @@
+.git
+.github
+.venv
+.npm-cache
+.claude
+node_modules
+dist
+data
+tests
+*.log
+.env
+cookies*.txt
+**/__pycache__

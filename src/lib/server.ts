@@ -1,5 +1,22 @@
 /** Where the API lives. The bundled UI talks to its own origin; the hosted (GitHub Pages) build asks for a server. */
 export const HOSTED = import.meta.env.VITE_HOSTED === '1';
+/** Address built into the hosted site, so visitors never have to type it. */
+export const SERVER_URL: string = (import.meta.env.VITE_SERVER_URL ?? '').replace(/\/+$/, '');
+
+/** Random id per browser; the server shows each browser only its own downloads. */
+export function clientId(): string {
+  try {
+    let id = localStorage.getItem('landownload:client');
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem('landownload:client', id);
+    }
+    return id;
+  } catch {
+    return (sessionId ??= crypto.randomUUID());
+  }
+}
+let sessionId: string | undefined;
 
 export interface Connection {
   url: string;
@@ -15,7 +32,7 @@ export function loadConnection(): Connection {
   } catch {
     /* Blocked or corrupt storage: fall through to an empty connection. */
   }
-  return { url: '', session: '' };
+  return { url: SERVER_URL, session: '' };
 }
 
 export function saveConnection(connection: Connection) {

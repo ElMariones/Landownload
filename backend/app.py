@@ -1,4 +1,5 @@
 import asyncio
+import re
 import hashlib
 import hmac
 import importlib.metadata
@@ -36,7 +37,7 @@ ALLOWED_ORIGINS.update(config.ORIGINS)
 @asynccontextmanager
 async def lifespan(app):
     global jobs
-    if config.HOST not in ('localhost', '127.0.0.1', '::1') and len(config.TOKEN) < 24:
+    if config.HOST not in ('localhost', '127.0.0.1', '::1') and len(config.TOKEN) < 24 and not config.OPEN:
         raise RuntimeError('Set LANDOWNLOAD_TOKEN to at least 24 characters before exposing the server to a network.')
     jobs = JobManager()
     async def cleanup_loop():
@@ -71,7 +72,7 @@ async def private_access(request: Request, call_next):
     origin = request.headers.get('origin')
     # Without an access key the server only answers on loopback, which also blocks DNS rebinding
     # and a tunnel accidentally exposing an unprotected instance.
-    if request.url.hostname not in LOOPBACK and not config.TOKEN:
+    if request.url.hostname not in LOOPBACK and not (config.TOKEN or config.OPEN):
         return JSONResponse({'detail': 'Set LANDOWNLOAD_TOKEN to use Landownload from another device.'}, status_code=403)
     if request.url.path.startswith('/api/'):
         same_origin = origin and urlsplit(origin).netloc == request.headers.get('host')
@@ -97,8 +98,21 @@ def authorized(request: Request):
 
 
 app.add_middleware(CORSMiddleware, allow_origins=sorted(ALLOWED_ORIGINS), allow_methods=['GET', 'POST', 'DELETE'],
-                   allow_headers=['Authorization', 'Content-Type'], expose_headers=['Content-Disposition'],
+                   allow_headers=['Authorization', 'Content-Type', 'X-Client-Id'], expose_headers=['Content-Disposition'],
                    allow_private_network=True, max_age=600)
+
+
+def client_id(request: Request):
+    # Random per-browser id: without accounts, each browser only sees and controls its own downloads.
+    value = request.headers.get('x-client-id', '')
+    return value if re.fullmatch(r'[A-Za-z0-9-]{8,64}', value) else ''
+
+
+def own_job(request: Request, job_id: str):
+    job = jobs.get(job_id)
+    if not job or job.get('owner', '') != client_id(request):
+        raise HTTPException(404, 'Download not found.')
+    return job
 
 
 class LinkRequest(BaseModel):
@@ -169,13 +183,13 @@ def thumbnail(media_id: str):
 
 
 @app.post('/api/downloads', status_code=201)
-def create_download(body: DownloadRequest):
+def create_download(body: DownloadRequest, request: Request):
     try:
         media = get_media(body.media_id)
         option = next((o for o in media['options'] if o['id'] == body.option_id), None)
         if not option:
             raise ValueError('Choose a format from this preview.')
-        return public_job(jobs.create(media, option))
+        return public_job(jobs.create(media, option, owner=client_id(request)))
     except (ValueError, MediaError) as exc:
         raise HTTPException(422, str(exc)) from exc
 
@@ -186,7 +200,7 @@ def sites():
 
 
 @app.post('/api/batches', status_code=201)
-async def create_batch(body: BatchRequest):
+async def create_batch(body: BatchRequest, request: Request):
     urls = list(dict.fromkeys(u.strip() for u in body.urls if u.strip()))
     if not urls:
         raise HTTPException(422, 'Add at least one link, one per line.')
@@ -201,18 +215,20 @@ async def create_batch(body: BatchRequest):
     if problems:
         raise HTTPException(422, 'Fix these links first: ' + ' · '.join(problems[:5]))
     try:
-        return public_job(jobs.create_batch(urls, body.mode))
+        return public_job(jobs.create_batch(urls, body.mode, owner=client_id(request)))
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
 
 
 @app.get('/api/downloads')
-def list_downloads():
-    return [public_job(j) for j in jobs.list()]
+def list_downloads(request: Request):
+    owner = client_id(request)
+    return [public_job(j) for j in jobs.list() if j.get('owner', '') == owner]
 
 
 @app.post('/api/downloads/{job_id}/cancel')
-def cancel_download(job_id: str):
+def cancel_download(job_id: str, request: Request):
+    own_job(request, job_id)
     try:
         jobs.cancel(job_id)
         return {'ok': True}
@@ -221,7 +237,8 @@ def cancel_download(job_id: str):
 
 
 @app.delete('/api/downloads/{job_id}')
-def remove_download(job_id: str):
+def remove_download(job_id: str, request: Request):
+    own_job(request, job_id)
     try:
         jobs.remove(job_id)
         return {'ok': True}

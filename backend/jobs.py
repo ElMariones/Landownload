@@ -51,14 +51,14 @@ class JobManager:
             with self.connect() as db:
                 db.execute('UPDATE jobs SET payload = ? WHERE id = ?', (json.dumps(job), job_id))
 
-    def create(self, media, option):
-        job = {'title': media['title'], 'platform': media['platform'], 'url': media['url'],
+    def create(self, media, option, owner=''):
+        job = {'owner': owner, 'title': media['title'], 'platform': media['platform'], 'url': media['url'],
                'quality': option['label'], 'kind': option['kind'], 'ext': option['ext']}
         return self.enqueue(job, {'engine': media['engine'], 'url': media['url'], 'title': media['title'], 'option': option})
 
-    def create_batch(self, urls, mode):
+    def create_batch(self, urls, mode, owner=''):
         title = f'Batch of {len(urls)} links'
-        job = {'title': title, 'platform': 'Batch', 'url': urls[0],
+        job = {'owner': owner, 'title': title, 'platform': 'Batch', 'url': urls[0],
                'quality': 'Best audio · MP3' if mode == 'audio' else 'Best quality', 'kind': 'batch', 'ext': 'zip',
                'items': [{'url': url, 'status': 'queued', 'title': None, 'error': None} for url in urls]}
         return self.enqueue(job, {'engine': 'batch', 'urls': urls, 'mode': mode, 'title': title,
@@ -160,4 +160,4 @@ class JobManager:
 
 
 def public_job(job):
-    return {k: v for k, v in job.items() if k != 'path'}
+    return {k: v for k, v in job.items() if k not in ('path', 'owner')}

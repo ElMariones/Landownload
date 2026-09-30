@@ -10,6 +10,8 @@ DATA = Path(os.getenv('LANDOWNLOAD_DATA', str(ROOT / 'data'))).resolve()
 HOST = os.getenv('LANDOWNLOAD_HOST', '127.0.0.1')
 PORT = int(os.getenv('LANDOWNLOAD_PORT', '8000'))
 TOKEN = os.getenv('LANDOWNLOAD_TOKEN', '')
+# Open mode: reachable from anywhere without a key (the Docker/Tailscale setup).
+OPEN = os.getenv('LANDOWNLOAD_OPEN', '') == '1'
 COOKIES = os.getenv('LANDOWNLOAD_COOKIES', '')
 FFMPEG = os.getenv('LANDOWNLOAD_FFMPEG', '')
 WORKERS = max(1, min(4, int(os.getenv('LANDOWNLOAD_WORKERS', '2'))))

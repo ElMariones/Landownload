@@ -1,4 +1,4 @@
-import { HOSTED, loadConnection } from './lib/server';
+import { clientId, HOSTED, loadConnection, SERVER_URL } from './lib/server';
 
 export type OptionKind = 'video' | 'audio' | 'image';
 
@@ -78,7 +78,7 @@ export class ApiError extends Error {
 }
 
 function base() {
-  return HOSTED ? loadConnection().url : '';
+  return HOSTED ? SERVER_URL || loadConnection().url : '';
 }
 
 /** For <img>/<a> requests, which cannot carry an Authorization header. */
@@ -89,13 +89,15 @@ export function assetUrl(path: string) {
 
 async function request<T>(path: string, init?: RequestInit & { json?: unknown }, server = base()): Promise<T> {
   const { json, ...rest } = init ?? {};
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { 'X-Client-Id': clientId() };
   if (json !== undefined) headers['Content-Type'] = 'application/json';
   const { session } = loadConnection();
   if (HOSTED && session) headers.Authorization = `Bearer ${session}`;
   let response: Response;
   try {
     response = await fetch(server + path, {
+      // A switched-off server behind a tunnel can hang instead of refusing; give up quickly.
+      signal: AbortSignal.timeout(path === '/api/inspect' || path === '/api/batches' ? 120_000 : 10_000),
       ...rest,
       credentials: HOSTED ? 'omit' : 'same-origin',
       headers,

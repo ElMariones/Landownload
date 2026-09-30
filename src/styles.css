@@ -1444,3 +1444,19 @@ code {
     transition-duration: 0.01ms !important;
   }
 }
+
+.off-card {
+  color: var(--coral);
+  text-align: center;
+  align-items: center;
+}
+
+.off-icon {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  background: var(--coral-soft);
+  border: 1px solid rgba(255, 122, 89, 0.35);
+}
