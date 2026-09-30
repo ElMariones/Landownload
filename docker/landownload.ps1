@@ -72,15 +72,19 @@ if ($LASTEXITCODE -ne 0) { Say 'Could not start the containers. See the messages
 
 # First run only: Tailscale needs you to sign in once to give this PC its public address.
 $status = $null
-$openedLogin = $false
-for ($i = 0; $i -lt 150; $i++) {
+# Tailscale's container gives up after 60 s without a sign-in; restart it and open the fresh link until it works.
+$openedUrl = ''
+for ($i = 0; $i -lt 300; $i++) {
     $status = Tailscale-Status
     if ($status -and $status.BackendState -eq 'Running' -and $status.Self.DNSName) { break }
-    if ($status -and $status.AuthURL -and -not $openedLogin) {
+    if (-not $status -and (docker compose ps --status exited --services 2>$null) -contains 'tailscale') {
+        docker compose up -d tailscale *> $null
+    }
+    if ($status -and $status.AuthURL -and $status.AuthURL -ne $openedUrl) {
         Say ''
-        Say 'One-time setup: sign in to Tailscale in the browser window that just opened (GitHub/Google login works).' 'Cyan'
+        Say 'One-time setup: a Tailscale page just opened. Click "Connect" there within a minute.' 'Cyan'
         Start-Process $status.AuthURL
-        $openedLogin = $true
+        $openedUrl = $status.AuthURL
     }
     Start-Sleep 2
 }
