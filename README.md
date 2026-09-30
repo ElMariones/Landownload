@@ -22,7 +22,7 @@ Starting brings up two containers:
 - **app**: Landownload with FFmpeg and Node included. It is always available on this PC at http://127.0.0.1:8000.
 - **tailscale**: a [Tailscale Funnel](https://tailscale.com/kb/1223/funnel) that gives the PC a permanent public address, `https://landownload.<your-tailnet>.ts.net`.
 
-The first start builds the image (a few minutes) and opens a Tailscale sign-in page once. A free account works, and you can sign in with GitHub. In the [Tailscale admin console](https://login.tailscale.com/admin/dns), enable **HTTPS Certificates**. The launcher prints the public address when everything is up.
+The first start builds the image (a few minutes). The public address also needs a one-time Tailscale auth key. With a free account, you can sign in with GitHub. If the key is missing, the launcher opens the [key page](https://login.tailscale.com/admin/settings/keys) and `.env` for you: generate a key, paste it after `TS_AUTHKEY=`, save, and start again. Also enable **HTTPS Certificates** in the [admin console](https://login.tailscale.com/admin/dns). The key is only used once; later starts reuse the saved login. The launcher prints the public address when everything is up.
 
 Downloads and history live in the `downloads` Docker volume. Each browser only sees its own downloads.
 

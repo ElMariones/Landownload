@@ -72,21 +72,29 @@ if ($LASTEXITCODE -ne 0) { Say 'Could not start the containers. See the messages
 
 # First run only: Tailscale needs you to sign in once to give this PC its public address.
 $status = $null
-# Tailscale's container gives up after 60 s without a sign-in; restart it and open the fresh link until it works.
-$openedUrl = ''
-for ($i = 0; $i -lt 300; $i++) {
+# First run only: Tailscale needs a one-time auth key to give this PC its public address.
+$status = $null
+for ($i = 0; $i -lt 45; $i++) {
     $status = Tailscale-Status
     if ($status -and $status.BackendState -eq 'Running' -and $status.Self.DNSName) { break }
-    if (-not $status -and (docker compose ps --status exited --services 2>$null) -contains 'tailscale') {
-        docker compose up -d tailscale *> $null
-    }
-    if ($status -and $status.AuthURL -and $status.AuthURL -ne $openedUrl) {
-        Say ''
-        Say 'One-time setup: a Tailscale page just opened. Click "Connect" there within a minute.' 'Cyan'
-        Start-Process $status.AuthURL
-        $openedUrl = $status.AuthURL
-    }
+    if ($status -and $status.BackendState -eq 'NeedsLogin' -and $i -ge 5) { break }
     Start-Sleep 2
+}
+if ($status -and $status.BackendState -eq 'NeedsLogin') {
+    if (-not (Test-Path .env) -or -not (Select-String -Path .env -Pattern '^TS_AUTHKEY=\S' -Quiet)) {
+        if (-not (Test-Path .env)) { Set-Content .env "TS_AUTHKEY=" -Encoding ascii }
+        Say ''
+        Say 'One-time setup: this PC needs a Tailscale auth key.' 'Cyan'
+        Say '  1. On the Tailscale page that just opened, click "Generate auth key..." then "Generate key", and copy it.'
+        Say '  2. Paste it after TS_AUTHKEY= in the .env file that opened in Notepad, and save.'
+        Say '  3. Run Start Landownload again.'
+        Start-Process 'https://login.tailscale.com/admin/settings/keys'
+        Start-Process notepad.exe (Join-Path $root '.env')
+    } else {
+        Say 'Tailscale rejected the auth key (used or expired). Generate a new one, replace it in .env, and start again.' 'Yellow'
+        Start-Process 'https://login.tailscale.com/admin/settings/keys'
+    }
+    Finish 1
 }
 if (-not ($status -and $status.BackendState -eq 'Running')) {
     Say 'Tailscale is not connected yet. Landownload works locally at http://127.0.0.1:8000; run Start again after signing in.' 'Yellow'
@@ -112,9 +120,18 @@ Say "  This PC:  http://127.0.0.1:8000"
 Say "  Anywhere: $publicUrl" 'White'
 if (-not $public) {
     Say ''
-    Say 'The public address is not answering yet. In the Tailscale admin console make sure that:' 'Yellow'
-    Say '  1. DNS page -> HTTPS Certificates is enabled   (https://login.tailscale.com/admin/dns)'
-    Say '  2. Access controls allow Funnel for this device (the default policy does)'
-    Say 'Then run Start again. The first HTTPS certificate can also take a minute to be issued.'
+    Say 'The public address is not answering yet.' 'Yellow'
+    # When Funnel is off for the tailnet, the CLI prints a one-click link to turn it on.
+    $probe = Start-Job { param($dir) Set-Location $dir; docker compose exec -T tailscale tailscale funnel --bg 8000 2>&1 } -ArgumentList $root
+    Wait-Job $probe -Timeout 20 | Out-Null
+    $enable = [regex]::Match(((Receive-Job $probe) -join "`n"), 'https://login\.tailscale\.com/f/funnel\S+').Value
+    Remove-Job $probe -Force
+    if ($enable) {
+        Say 'Funnel is turned off for your Tailscale account. Click "Enable" on the page that just opened, then run Start again.' 'Cyan'
+        Start-Process $enable
+    } else {
+        Say 'Check that HTTPS Certificates is enabled at https://login.tailscale.com/admin/dns, then run Start again.'
+        Say 'The first HTTPS certificate can also take a minute to be issued.'
+    }
 }
 Finish
