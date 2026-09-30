@@ -25,8 +25,12 @@ services:
     network_mode: service:tailscale
     depends_on:
       - tailscale
+    # Values come from .env next to this file; the image itself never contains .env.
     environment:
       LANDOWNLOAD_ORIGINS: ${LANDOWNLOAD_ORIGINS:-https://elmariones.github.io}
+      LANDOWNLOAD_WORKERS: ${LANDOWNLOAD_WORKERS:-2}
+      LANDOWNLOAD_RETENTION_HOURS: ${LANDOWNLOAD_RETENTION_HOURS:-48}
+      LANDOWNLOAD_TOKEN: ${LANDOWNLOAD_TOKEN:-}
     volumes:
       - downloads:/data
 
