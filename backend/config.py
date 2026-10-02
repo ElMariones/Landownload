@@ -1,3 +1,4 @@
+import importlib.util
 import os
 import shutil
 from pathlib import Path
@@ -24,6 +25,11 @@ def ffmpeg_available():
     return bool(shutil.which('ffmpeg', path=FFMPEG or None))
 
 
+def can_impersonate():
+    # curl_cffi lets yt-dlp present a real browser's TLS fingerprint; some sites 403 plain Python clients.
+    return importlib.util.find_spec('curl_cffi') is not None
+
+
 def cookie_args():
     return ['--cookies', COOKIES] if COOKIES else []
 
@@ -32,6 +38,8 @@ def yt_args():
     args = ['--ignore-config', '--no-playlist', '--no-warnings', '--no-colors',
             '--socket-timeout', '20', '--retries', '2', '--extractor-retries', '2',
             '--js-runtimes', 'node', *cookie_args()]
+    if can_impersonate():
+        args += ['--impersonate', 'chrome']
     if FFMPEG:
         args += ['--ffmpeg-location', FFMPEG]
     return args

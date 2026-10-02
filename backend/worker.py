@@ -9,8 +9,9 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import yt_dlp
+from yt_dlp.networking.impersonate import ImpersonateTarget
 
-from .config import COOKIES, FFMPEG, cookie_args, ffmpeg_available
+from .config import COOKIES, FFMPEG, can_impersonate, cookie_args, ffmpeg_available
 from .network import public_stream
 from .security import friendly_error, validate_url
 
@@ -53,6 +54,8 @@ def ytdl_download(url, directory, title, selector, merge_format, on_progress, mp
             'windowsfilenames': True, 'js_runtimes': {'node': {}}, 'cachedir': False}
     if COOKIES:
         opts['cookiefile'] = COOKIES
+    if can_impersonate():
+        opts['impersonate'] = ImpersonateTarget('chrome')
     if FFMPEG:
         opts['ffmpeg_location'] = FFMPEG
     if mp3:
