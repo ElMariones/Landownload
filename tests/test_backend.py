@@ -139,3 +139,11 @@ def test_each_browser_only_sees_its_own_downloads(client):
     assert theirs == []
     stranger = client.post(f"/api/downloads/{job['id']}/cancel", json={}, headers={**auth, 'X-Client-Id': 'browser-bbbb'})
     assert stranger.status_code == 404
+
+
+def test_single_file_pages_without_a_formats_list_still_work():
+    # The generic extractor returns one file as the result itself: url/ext, no "formats" list.
+    info = {'url': 'https://cdn.example/v/123.mp4', 'ext': 'mp4', 'format_id': '0', 'title': 't'}
+    options = media.video_options(info)
+    assert [(o['id'], o['label'], o['selector']) for o in options if o['kind'] == 'video'] == [('v-0', 'Original', '0')]
+    assert media.entry_options({'title': 'nothing here'}) == []

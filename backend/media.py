@@ -58,6 +58,18 @@ def mp4_audio(f):
     return f.get('ext') in ('m4a', 'mp4')
 
 
+def formats_of(info):
+    # A page with one file comes back as the file itself (url/ext on the result), with no formats list.
+    if info.get('formats'):
+        return info['formats']
+    return [{**info, 'format_id': str(info.get('format_id') or '0')}] if info.get('url') else []
+
+
+def quality_label(f):
+    name = str(f.get('format_note') or f.get('format_id') or '')
+    return name.capitalize() + ' quality' if name and not name.isdigit() else 'Original'
+
+
 def rank(f):
     # Site-declared quality, then direct files over segmented streams, then bitrate.
     direct = str(f.get('protocol') or 'https') in ('http', 'https')
@@ -65,7 +77,7 @@ def rank(f):
 
 
 def video_options(info):
-    formats = [f for f in info.get('formats', []) if not f.get('has_drm') and f.get('format_id')
+    formats = [f for f in formats_of(info) if not f.get('has_drm') and f.get('format_id')
                and re.fullmatch(r'[\w.-]+', str(f['format_id'])) and f.get('ext') not in ('mhtml', *IMAGE_EXTS)
                and 'storyboard' not in str(f.get('format_note') or '')]
     audio = [f for f in formats if is_audio_only(f)]
@@ -101,7 +113,7 @@ def video_options(info):
         elif silent and not merge:
             note = 'Video only'
         option = {'id': 'v-' + str(f['format_id']), 'kind': 'video',
-                  'label': f'{height}p' if height else str(f.get('format_note') or f['format_id']).capitalize() + ' quality',
+                  'label': f'{height}p' if height else quality_label(f),
                   'ext': ext, 'height': height or 0, 'fps': fps, 'size': size,
                   'codec': str(f.get('vcodec') or '').split('.')[0], 'audio': has_audio,
                   'note': note, 'selector': selector, '_rank': rank(f)}
@@ -129,7 +141,7 @@ def video_options(info):
 
 
 def image_options(info):
-    images = [f for f in info.get('formats', []) if f.get('ext') in IMAGE_EXTS and f.get('format_id')
+    images = [f for f in formats_of(info) if f.get('ext') in IMAGE_EXTS and f.get('format_id')
               and re.fullmatch(r'[\w.-]+', str(f['format_id']))]
     images.sort(key=lambda f: (f.get('width') or 0) * (f.get('height') or 0), reverse=True)
     return [{'id': 'i-' + str(f['format_id']), 'kind': 'image', 'ext': f['ext'], 'height': f.get('height') or 0,
@@ -189,7 +201,7 @@ def inspect_media(url):
             first = entries[0] if entries else info
             result = {'title': info.get('title') or first.get('title') or 'Untitled video',
                       'author': info.get('uploader') or first.get('uploader') or info.get('channel') or host,
-                      'platform': info.get('extractor_key') or host, 'duration': None if entries else info.get('duration'),
+                      'platform': (host.removeprefix('www.') if info.get('extractor_key') in (None, 'Generic') else info['extractor_key']), 'duration': None if entries else info.get('duration'),
                       'thumbnail': info.get('thumbnail') or first.get('thumbnail'), 'engine': 'yt_dlp', 'options': options,
                       'items': [{} for _ in entries]}
         except MediaError as video_error:
